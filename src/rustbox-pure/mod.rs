@@ -180,6 +180,8 @@ impl RustBox {
         Ok(rb)
     }
 
+    pub fn shutdown(self) {}
+
     pub fn width(&self) -> usize {
         self.cell_buffer.width
     }
