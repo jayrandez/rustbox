@@ -1,3 +1,5 @@
+**See [issues](https://github.com/jayrandez/rustbox/issues) for running notes on windows implementation**
+
 # Rustbox
 
 Rustbox is a Rust implementation of [termbox](http://github.com/nsf/termbox).
