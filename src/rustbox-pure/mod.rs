@@ -122,9 +122,6 @@ pub struct RustBox {
     _running: running::RunningGuard
 }
 
-// Termbox is not thread safe
-impl !Send for RustBox {}
-
 impl RustBox {
     /// Initialize Rustbox.
     ///
@@ -184,13 +181,11 @@ impl RustBox {
     }
 
     pub fn width(&self) -> usize {
-        // TODO: !! This should report the internal buffer size, for consistency with termbox.
-        console::visible_size(self.handle).width
+        self.cell_buffer.width
     }
 
     pub fn height(&self) -> usize {
-        // TODO: !! This should report the internal buffer size for consistency with termbox.
-        console::visible_size(self.handle).height
+        self.cell_buffer.height
     }
 
     pub fn clear(&mut self) {
@@ -272,9 +267,7 @@ impl RustBox {
 
     pub fn put_cell(&mut self, x: usize, y: usize, cell: Cell)
     {
-        unsafe {
-            self.change_cell(x, y, cell.ch as u32, cell.fg, cell.bg, cell.sty);
-        }
+        self.change_cell(x, y, cell.ch as u32, cell.fg, cell.bg, cell.sty);
     }
 
     pub fn print(&self, x: usize, y: usize, sty: Style, fg: Color, bg: Color, s: &str) {
