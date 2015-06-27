@@ -56,7 +56,6 @@ pub fn handle() -> Option<Handle>
         None
     }
     else {
-        println!("Handle is {}", result as isize);
         Some(Handle { ptr: result })
     }
 }

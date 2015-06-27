@@ -172,8 +172,7 @@ impl RustBox {
         Ok(rb)
     }
 
-    fn beginDisplay(&mut self)
-    {
+    fn beginDisplay(&mut self) {
         /* Begin display should set up the console with the necessary properties (buffer capacity,
         window size, font), and display a blank region for rustbox to use, while preserving the
         original console contents above this region. */
@@ -193,13 +192,16 @@ impl RustBox {
 
         // By default, hide the cursor
         console::set_cursor_visible(self.handle, false);
+
+        // TEMP
+        console::fill_character(self.handle, b'A', visible_size.width * visible_size.height, Location {x: 0, y: self.display_line});
+        console::fill_attribute(self.handle, 12312 as u16, visible_size.width * visible_size.height, Location {x: 0, y: self.display_line});
     }
 
-    fn finishDisplay(&mut self)
-    {
+    fn finishDisplay(&mut self) {
         /* Finish display should restore the original console properties (buffer capacity, window
         size, font), clear the display area used by rustbox, and place the cursor one line below
-        its original location before the rustbox display began. */
+        the rustbox display. NOTE: May clear display area to be consistent with ncurses. */
 
         // Redisplay cursor
         console::set_cursor_visible(self.handle, true);
@@ -218,11 +220,13 @@ impl RustBox {
     }
 
     pub fn width(&self) -> usize {
-        0
+        // TODO: !! This should report the internal buffer size, for consistency with termbox.
+        console::visible_size(self.handle).width
     }
 
     pub fn height(&self) -> usize {
-        0
+        // TODO: !! This should report the internal buffer size for consistency with termbox.
+        console::visible_size(self.handle).height
     }
 
     pub fn clear(&self) {
@@ -234,7 +238,19 @@ impl RustBox {
     }
 
     pub fn set_cursor(&self, x: isize, y: isize) {
+        if x == -1 && y == -1 {
+            console::set_cursor_visible(self.handle, false);
+        }
+        else {
+            let (x, y) = (x as usize, y as usize);
+            let visible_size = console::visible_size(self.handle);
 
+            if x < visible_size.width && y < visible_size.height {
+                let location = Location {x: x, y: self.display_line + y};
+                console::set_cursor_location(self.handle, location);
+                console::set_cursor_visible(self.handle, true);
+            }
+        }
     }
 
     pub unsafe fn change_cell(&self, x: usize, y: usize, ch: u32, fg: u16, bg: u16) {
