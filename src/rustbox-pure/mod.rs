@@ -1,13 +1,17 @@
 extern crate winapi;
 extern crate kernel32;
 
+mod running;
+pub mod event;
+pub mod style;
 pub mod keyboard;
 pub mod mouse;
 
+pub use self::event::{Event, EventResult};
 pub use self::keyboard::Key;
 pub use self::mouse::Mouse;
 pub use self::running::running;
-pub use self::style::{Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
+pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
 
 use std::default::Default;
 use std::error::Error;
@@ -16,19 +20,9 @@ use num::FromPrimitive;
 use libc::c_int;
 use time::Duration;
 
-#[derive(Clone, Copy)]
-pub enum Event {
-    KeyEventRaw(u8, u16, u32),
-    KeyEvent(Option<Key>),
-    ResizeEvent(i32, i32),
-    MouseEvent(Mouse, i32, i32),
-    NoEvent
-}
-
 #[derive(Clone, Copy, Debug)]
 pub enum InputMode {
     Current = 0x00,
-
     /// When ESC sequence is in the buffer and it doesn't match any known
     /// ESC sequence => ESC means TB_KEY_ESC
     Esc     = 0x01,
@@ -39,90 +33,6 @@ pub enum InputMode {
     EscMouse = 0x05,
     /// Same as `Alt` but enables mouse events
     AltMouse = 0x06
-}
-
-#[derive(Clone, Copy, PartialEq)]
-#[repr(C,u16)]
-pub enum Color {
-    Default =  0x00,
-    Black =    0x01,
-    Red =      0x02,
-    Green =    0x03,
-    Yellow =   0x04,
-    Blue =     0x05,
-    Magenta =  0x06,
-    Cyan =     0x07,
-    White =    0x08,
-}
-
-mod style {
-    bitflags! {
-        #[repr(C)]
-        flags Style: u16 {
-            const TB_NORMAL_COLOR = 0x000F,
-            const RB_BOLD = 0x0100,
-            const RB_UNDERLINE = 0x0200,
-            const RB_REVERSE = 0x0400,
-            const RB_NORMAL = 0x0000,
-            const TB_ATTRIB = RB_BOLD.bits | RB_UNDERLINE.bits | RB_REVERSE.bits,
-        }
-    }
-
-    impl Style {
-        pub fn from_color(color: super::Color) -> Style {
-            Style { bits: color as u16 & TB_NORMAL_COLOR.bits }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum EventError {
-   TermboxError,
-   Unknown(isize),
-}
-
-impl fmt::Display for EventError {
-   fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-      write!(fmt, "{}", self.description())
-   }
-}
-
-impl Error for EventError {
-   fn description(&self) -> &str {
-      match *self {
-         EventError::TermboxError => "Error in Termbox",
-         // I don't know how to format this without lifetime error.
-         // EventError::Unknown(n) => &format!("There was an unknown error. Error code: {}", n),
-         EventError::Unknown(_) => "Unknown error in Termbox",
-      }
-   }
-}
-
-impl FromPrimitive for EventError {
-   fn from_i64(n: i64) -> Option<EventError> {
-      match n {
-         -1 => Some(EventError::TermboxError),
-         n => Some(EventError::Unknown(n as isize)),
-      }
-   }
-
-   fn from_u64(n: u64) -> Option<EventError> {
-      Some(EventError::Unknown(n as isize))
-   }
-}
-
-pub type EventResult = Result<Event, EventError>;
-
-/// Unpack a RawEvent to an Event
-///
-/// if the `raw` parameter is true, then the Event variant will be the raw
-/// representation of the event.
-///     for instance KeyEventRaw instead of KeyEvent
-///
-/// This is useful if you want to interpret the raw event data yourself, rather
-/// than having rustbox translate it to its own representation.
-fn unpack_event(ev_type: c_int, /*ev: &RawEvent,*/ raw: bool) -> EventResult {
-    Ok(Event::NoEvent)
 }
 
 #[derive(Debug)]
@@ -212,45 +122,6 @@ impl Default for InitOptions {
         InitOptions {
             input_mode: InputMode::Current,
             buffer_stderr: false,
-        }
-    }
-}
-
-mod running {
-    use std::sync::atomic::{self, AtomicBool};
-
-    // The state of the RustBox is protected by the lock. Yay, global state!
-    static RUSTBOX_RUNNING: AtomicBool = atomic::ATOMIC_BOOL_INIT;
-
-    /// true iff RustBox is currently running. Beware of races here--don't rely on this for anything
-    /// critical unless you happen to know that RustBox cannot change state when it is called (a good
-    /// usecase would be checking to see if it's worth risking double printing backtraces to avoid
-    /// having them swallowed up by RustBox).
-    pub fn running() -> bool {
-        RUSTBOX_RUNNING.load(atomic::Ordering::SeqCst)
-    }
-
-    // Internal RAII guard used to ensure we release the running lock whenever we acquire it.
-    #[allow(missing_copy_implementations)]
-    pub struct RunningGuard(());
-
-    pub fn run() -> Option<RunningGuard> {
-        // Ensure that we are not already running and simultaneously set RUSTBOX_RUNNING using an
-        // atomic swap. This ensures that contending threads don't trample each other.
-        if RUSTBOX_RUNNING.swap(true, atomic::Ordering::SeqCst) {
-            // The Rustbox was already running.
-            None
-        } else {
-            // The RustBox was not already running, and now we have the lock.
-            Some(RunningGuard(()))
-        }
-    }
-
-    impl Drop for RunningGuard {
-        fn drop(&mut self) {
-            // Indicate that we're free now. We could probably get away with lower atomicity here,
-            // but there's no reason to take that chance.
-            RUSTBOX_RUNNING.store(false, atomic::Ordering::SeqCst);
         }
     }
 }
