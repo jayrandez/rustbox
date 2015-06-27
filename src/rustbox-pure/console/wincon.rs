@@ -26,8 +26,6 @@ use super::kernel32::{
     SetConsoleCursorPosition
 };
 
-use super::style::{Color, Style};
-
 #[derive(Clone, Copy)]
 pub struct Handle
 {
@@ -220,11 +218,6 @@ pub fn set_cursor_location(handle: Handle, location: Location)
     unsafe {
         SetConsoleCursorPosition(handle.ptr, coord);
     }
-}
-
-pub fn attr_translate(fg: Color, bg: Color, style: Style) -> u16
-{
-
 }
 
 /* Full Declaration Reference for Imported FFI Functions

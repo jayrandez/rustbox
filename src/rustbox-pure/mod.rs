@@ -1,6 +1,3 @@
-extern crate winapi;
-extern crate kernel32;
-
 pub mod event;
 pub mod keyboard;
 pub mod mouse;
@@ -118,6 +115,8 @@ impl Default for InitOptions {
 pub struct RustBox {
     handle: Handle,
     display_line: usize,
+    cell_buffer: CellBuffer,
+    default_attr: u16,
     /* Note that running *MUST* be the last field in the destructor, since destructors run in
     top-down order. Otherwise it will not properly protect the above fields. */
     _running: running::RunningGuard
@@ -159,68 +158,29 @@ impl RustBox {
             None => return Err(InitError::UnsupportedTerminal)
         };
 
+        /* This function will eventually return a DisplayInfo struct encapsulating (in addition
+        to visible_size and display_line) the original state to be restored when finished */
+        let (visible_size, display_line) = console::beginDisplay(handle);
+        let Size {width: width, height: height} = visible_size;
+
+        let default_attr = console::attr_translate(Color::Default, Color::Black, style::RB_NORMAL);
+        let cell_buffer = CellBuffer::new(width, height, b' ', default_attr);
+
         // Create the RustBox.
         let mut rb = RustBox {
             handle: handle,
-            display_line: 0,
+            display_line: display_line,
+            cell_buffer: cell_buffer,
+            default_attr: default_attr,
             _running: running
         };
-
-        rb.beginDisplay();
 
         match opts.input_mode {
             InputMode::Current => (),
             _ => rb.set_input_mode(opts.input_mode),
-        }
+        };
 
         Ok(rb)
-    }
-
-    fn beginDisplay(&mut self) {
-        /* Begin display should set up the console with the necessary properties (buffer capacity,
-        window size, font), and display a blank region for rustbox to use, while preserving the
-        original console contents above this region. */
-
-        // TODO: Set up window parameters buffer size, window size, font
-        // ...
-
-        // Scroll console to clear a region at least the height of the visible window. Kludgy
-        let visible_size = console::visible_size(self.handle);
-        for i in 0..visible_size.height {
-            println!("");
-        }
-
-        // Set display_line for the display to the y origin of the region just cleared
-        let cursor_line = console::cursor_location(self.handle).y;
-        self.display_line = cursor_line - visible_size.height + 1;
-
-        // By default, hide the cursor
-        console::set_cursor_visible(self.handle, false);
-
-        // TEMP
-        console::fill_character(self.handle, b'A', visible_size.width * visible_size.height, Location {x: 0, y: self.display_line});
-        console::fill_attribute(self.handle, 12312 as u16, visible_size.width * visible_size.height, Location {x: 0, y: self.display_line});
-    }
-
-    fn finishDisplay(&mut self) {
-        /* Finish display should restore the original console properties (buffer capacity, window
-        size, font), clear the display area used by rustbox, and place the cursor one line below
-        the rustbox display. NOTE: May clear display area to be consistent with ncurses. */
-
-        // Redisplay cursor
-        console::set_cursor_visible(self.handle, true);
-
-        // Place cursor at origin of rustbox display region
-        console::set_cursor_location(self.handle, Location {x: 0, y: self.display_line});
-
-        // Scroll console until cursor is just below the rustbox display region. Kludgy
-        let visible_size = console::visible_size(self.handle);
-        for i in 0..visible_size.height {
-            println!("");
-        }
-
-        // TODO: Restore original window parameters buffer size, window size, font
-        // ...
     }
 
     pub fn width(&self) -> usize {
@@ -288,6 +248,7 @@ impl Drop for RustBox {
         need to do this atomically.
         NOTE: we should definitely have RUSTBOX_RUNNING = true here.*/
 
-        self.finishDisplay();
+        /* See sibling comment for console::startDisplay(). Will receive inst of DisplayInfo */
+        console::finishDisplay(self.handle, self.display_line);
     }
 }
