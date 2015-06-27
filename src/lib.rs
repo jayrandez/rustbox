@@ -1,5 +1,6 @@
 #![feature(libc)]
 #![feature(optin_builtin_traits)]
+#![feature(convert)]
 
 extern crate libc;
 extern crate num;

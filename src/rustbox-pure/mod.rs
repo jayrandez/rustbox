@@ -13,6 +13,7 @@ pub use self::keyboard::Key;
 pub use self::mouse::Mouse;
 pub use self::running::running;
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
+pub use self::console::{Handle, Size, Location};
 
 use std::default::Default;
 use std::error::Error;
@@ -87,17 +88,6 @@ impl FromPrimitive for InitError {
    }
 }
 
-#[allow(missing_copy_implementations)]
-pub struct RustBox {
-    /* Note that running *MUST* be the last field in the destructor, since destructors run in
-    top-down order. Otherwise it will not properly protect the above fields. */
-
-    _running: running::RunningGuard,
-}
-
-// Termbox is not thread safe
-impl !Send for RustBox {}
-
 #[derive(Clone, Copy,Debug)]
 pub struct InitOptions {
     /// Use this option to initialize with a specific input mode.
@@ -119,6 +109,18 @@ impl Default for InitOptions {
         }
     }
 }
+
+#[allow(missing_copy_implementations)]
+pub struct RustBox {
+    handle: Handle,
+    display_line: usize,
+    /* Note that running *MUST* be the last field in the destructor, since destructors run in
+    top-down order. Otherwise it will not properly protect the above fields. */
+    _running: running::RunningGuard
+}
+
+// Termbox is not thread safe
+impl !Send for RustBox {}
 
 impl RustBox {
     /// Initialize Rustbox.
@@ -148,10 +150,19 @@ impl RustBox {
             None => return Err(InitError::AlreadyOpen),
         };
 
+        let handle = match console::handle() {
+            Some(val) => val,
+            None => return Err(InitError::UnsupportedTerminal)
+        };
+
         // Create the RustBox.
-        let rb = RustBox {
+        let mut rb = RustBox {
+            handle: handle,
+            display_line: 0,
             _running: running
         };
+
+        rb.beginDisplay();
 
         match opts.input_mode {
             InputMode::Current => (),
@@ -159,6 +170,51 @@ impl RustBox {
         }
 
         Ok(rb)
+    }
+
+    fn beginDisplay(&mut self)
+    {
+        /* Begin display should set up the console with the necessary properties (buffer capacity,
+        window size, font), and display a blank region for rustbox to use, while preserving the
+        original console contents above this region. */
+
+        // TODO: Set up window parameters buffer size, window size, font
+        // ...
+
+        // Scroll console to clear a region at least the height of the visible window. Kludgy
+        let visible_size = console::visible_size(self.handle);
+        for i in 0..visible_size.height {
+            println!("");
+        }
+
+        // Set display_line for the display to the y origin of the region just cleared
+        let cursor_line = console::cursor_location(self.handle).y;
+        self.display_line = cursor_line - visible_size.height + 1;
+
+        // By default, hide the cursor
+        console::set_cursor_visible(self.handle, false);
+    }
+
+    fn finishDisplay(&mut self)
+    {
+        /* Finish display should restore the original console properties (buffer capacity, window
+        size, font), clear the display area used by rustbox, and place the cursor one line below
+        its original location before the rustbox display began. */
+
+        // Redisplay cursor
+        console::set_cursor_visible(self.handle, true);
+
+        // Place cursor at origin of rustbox display region
+        console::set_cursor_location(self.handle, Location {x: 0, y: self.display_line});
+
+        // Scroll console until cursor is just below the rustbox display region. Kludgy
+        let visible_size = console::visible_size(self.handle);
+        for i in 0..visible_size.height {
+            println!("");
+        }
+
+        // TODO: Restore original window parameters buffer size, window size, font
+        // ...
     }
 
     pub fn width(&self) -> usize {
@@ -212,5 +268,6 @@ impl Drop for RustBox {
         need to do this atomically.
         NOTE: we should definitely have RUSTBOX_RUNNING = true here.*/
 
+        self.finishDisplay();
     }
 }
