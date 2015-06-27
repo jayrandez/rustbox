@@ -1,19 +1,23 @@
 extern crate winapi;
 extern crate kernel32;
 
-mod running;
-mod console;
 pub mod event;
-pub mod style;
 pub mod keyboard;
 pub mod mouse;
+pub mod cell;
+pub mod style;
+
+mod running;
+mod console;
 
 pub use self::event::{Event, EventResult};
 pub use self::keyboard::Key;
 pub use self::mouse::Mouse;
-pub use self::running::running;
+pub use self::cell::{Cell, CellBuffer};
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
-pub use self::console::{Handle, Size, Location};
+
+use self::running::running;
+use self::console::{Handle, Size, Location};
 
 use std::default::Default;
 use std::error::Error;

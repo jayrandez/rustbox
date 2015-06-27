@@ -1,6 +1,7 @@
 #![feature(libc)]
 #![feature(optin_builtin_traits)]
 #![feature(convert)]
+#![feature(vec_resize)]
 
 extern crate libc;
 extern crate num;
