@@ -2,6 +2,7 @@ extern crate winapi;
 extern crate kernel32;
 
 mod running;
+mod console;
 pub mod event;
 pub mod style;
 pub mod keyboard;
