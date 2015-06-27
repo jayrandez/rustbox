@@ -25,10 +25,10 @@ pub enum InputMode {
     Current = 0x00,
     /// When ESC sequence is in the buffer and it doesn't match any known
     /// ESC sequence => ESC means TB_KEY_ESC
-    Esc     = 0x01,
+    Esc = 0x01,
     /// When ESC sequence is in the buffer and it doesn't match any known
     /// sequence => ESC enables TB_MOD_ALT modifier for the next keyboard event.
-    Alt     = 0x02,
+    Alt = 0x02,
     /// Same as `Esc` but enables mouse events
     EscMouse = 0x05,
     /// Same as `Alt` but enables mouse events
@@ -88,12 +88,9 @@ impl FromPrimitive for InitError {
 
 #[allow(missing_copy_implementations)]
 pub struct RustBox {
-    // We only bother to redirect stderr for the moment, since it's used for panic!
-    //_stderr: Option<Hold>,
-    // RAII lock.
-    //
-    // Note that running *MUST* be the last field in the destructor, since destructors run in
-    // top-down order. Otherwise it will not properly protect the above fields.
+    /* Note that running *MUST* be the last field in the destructor, since destructors run in
+    top-down order. Otherwise it will not properly protect the above fields. */
+
     _running: running::RunningGuard,
 }
 
@@ -102,18 +99,14 @@ impl !Send for RustBox {}
 
 #[derive(Clone, Copy,Debug)]
 pub struct InitOptions {
-    /// Use this option to initialize with a specific input mode
-    ///
+    /// Use this option to initialize with a specific input mode.
     /// See InputMode enum for details on the variants.
+
     pub input_mode: InputMode,
 
-    /// Use this option to automatically buffer stderr while RustBox is running.  It will be
-    /// written when RustBox exits.
-    ///
-    /// This option uses a nonblocking OS pipe to buffer stderr output.  This means that if the
-    /// pipe fills up, subsequent writes will fail until RustBox exits.  If this is a concern for
-    /// your program, don't use RustBox's default pipe-based redirection; instead, redirect stderr
-    /// to a log file or another process that is capable of handling it better.
+    /// NOTE: buffer_stderr remains for API consistency, but is not supported on Windows.
+    /// Functionality will eventually converge between Linux/OSX/Windows.
+
     pub buffer_stderr: bool,
 }
 
@@ -127,10 +120,9 @@ impl Default for InitOptions {
 }
 
 impl RustBox {
-    /// Initialize rustbox.
+    /// Initialize Rustbox.
     ///
     /// For the default options, you can use:
-    ///
     /// ```
     /// use rustbox::RustBox;
     /// use std::default::Default;
@@ -138,12 +130,17 @@ impl RustBox {
     /// ```
     ///
     /// Otherwise, you can specify:
-    ///
     /// ```
     /// use rustbox::{RustBox, InitOptions};
     /// use std::default::Default;
-    /// let rb = RustBox::init(InitOptions { input_mode: rustbox::InputMode::Esc, ..Default::default() });
+    /// let rb = RustBox::init(InitOptions {
+    ///     input_mode: rustbox::InputMode::Esc,
+    ///    buffer_stderr: false
+    /// });
     /// ```
+    ///
+    /// Again, buffer_stderr is unimplemented on windows.
+
     pub fn init(opts: InitOptions) -> Result<RustBox, InitError> {
         let running = match running::run() {
             Some(r) => r,
@@ -152,7 +149,6 @@ impl RustBox {
 
         // Create the RustBox.
         let rb = RustBox {
-            //_stderr: None,
             _running: running
         };
 
@@ -189,21 +185,11 @@ impl RustBox {
     }
 
     pub fn print(&self, x: usize, y: usize, sty: Style, fg: Color, bg: Color, s: &str) {
-        let fg = Style::from_color(fg) | (sty & style::TB_ATTRIB);
-        let bg = Style::from_color(bg);
-        for (i, ch) in s.chars().enumerate() {
-            unsafe {
-                self.change_cell(x+i, y, ch as u32, fg.bits(), bg.bits());
-            }
-        }
+
     }
 
     pub fn print_char(&self, x: usize, y: usize, sty: Style, fg: Color, bg: Color, ch: char) {
-        let fg = Style::from_color(fg) | (sty & style::TB_ATTRIB);
-        let bg = Style::from_color(bg);
-        unsafe {
-            self.change_cell(x, y, ch as u32, fg.bits(), bg.bits());
-        }
+
     }
 
     pub fn poll_event(&self, raw: bool) -> EventResult {
@@ -221,9 +207,9 @@ impl RustBox {
 
 impl Drop for RustBox {
     fn drop(&mut self) {
-        // Since only one instance of the RustBox is ever accessible, we should not
-        // need to do this atomically.
-        // Note: we should definitely have RUSTBOX_RUNNING = true here.
+        /* Since only one instance of the RustBox is ever accessible, we should not
+        need to do this atomically.
+        NOTE: we should definitely have RUSTBOX_RUNNING = true here.*/
 
     }
 }
