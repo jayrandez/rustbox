@@ -160,7 +160,7 @@ impl RustBox {
 
         /* This function will eventually return a DisplayInfo struct encapsulating (in addition
         to visible_size and display_line) the original state to be restored when finished */
-        let (visible_size, display_line) = console::beginDisplay(handle);
+        let (visible_size, display_line) = console::begin_display(handle);
         let Size {width: width, height: height} = visible_size;
 
         let default_attr = console::attr_translate(Color::Default, Color::Black, style::RB_NORMAL);
@@ -193,12 +193,49 @@ impl RustBox {
         console::visible_size(self.handle).height
     }
 
-    pub fn clear(&self) {
+    pub fn clear(&mut self) {
+        let Size {width: width, height: height} = console::visible_size(self.handle);
 
+        // Resize backbuffer if its size doesn't match the visible size.
+        if width != self.cell_buffer.width || height != self.cell_buffer.height {
+            self.cell_buffer.resize_blindly(width, height);
+        }
+
+        let char_slice = self.cell_buffer.char_buffer.as_mut_slice();
+        let attr_slice = self.cell_buffer.attr_buffer.as_mut_slice();
+
+        for i in 0..char_slice.len() {
+            char_slice[i] = b' ';
+            attr_slice[i] = self.default_attr;
+        }
     }
 
-    pub fn present(&self) {
+    pub fn set_clear_attributes(&mut self, foreground: Color, background: Color, style: Style) {
+        self.default_attr = console::attr_translate(foreground, background, style);
+    }
 
+    pub fn present(&mut self) {
+        let Size {width: width, height: height} = console::visible_size(self.handle);
+
+        // Resize backbuffer if its size doesn't match the visible size.
+        if width != self.cell_buffer.width || height != self.cell_buffer.height {
+            self.cell_buffer.resize(width, height, b' ', self.default_attr);
+        }
+
+        let char_slice = self.cell_buffer.char_buffer.as_slice();
+        let attr_slice = self.cell_buffer.attr_buffer.as_slice();
+
+        // Copy line-by-line, since buffer width is not equal to visible width.
+        for line in 0..height {
+            let index = line * width;
+
+            let char_subslice = &char_slice[index..(index + width)];
+            let attr_subslice = &attr_slice[index..(index + width)];
+
+            let origin = Location {x: 0, y: line + self.display_line};
+            console::write_characters(self.handle, char_subslice, origin);
+            console::write_attributes(self.handle, attr_subslice, origin);
+        }
     }
 
     pub fn set_cursor(&self, x: isize, y: isize) {
@@ -249,6 +286,6 @@ impl Drop for RustBox {
         NOTE: we should definitely have RUSTBOX_RUNNING = true here.*/
 
         /* See sibling comment for console::startDisplay(). Will receive inst of DisplayInfo */
-        console::finishDisplay(self.handle, self.display_line);
+        console::finish_display(self.handle, self.display_line);
     }
 }

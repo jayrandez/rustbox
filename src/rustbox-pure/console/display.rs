@@ -1,6 +1,6 @@
 use super::wincon::*;
 
-pub fn beginDisplay(handle: Handle) -> (Size, usize) {
+pub fn begin_display(handle: Handle) -> (Size, usize) {
     /* Begin display should set up the console with the necessary properties (buffer capacity,
     window size, font), and display a blank region for rustbox to use, while preserving the
     original console contents above this region. */
@@ -21,14 +21,10 @@ pub fn beginDisplay(handle: Handle) -> (Size, usize) {
     // By default, hide the cursor
     set_cursor_visible(handle, false);
 
-    // TEMP
-    fill_character(handle, b'A', visible_size.width * visible_size.height, Location {x: 0, y: display_line});
-    fill_attribute(handle, 12312 as u16, visible_size.width * visible_size.height, Location {x: 0, y: display_line});
-
     return (visible_size, display_line);
 }
 
-pub fn finishDisplay(handle: Handle, display_line: usize) {
+pub fn finish_display(handle: Handle, display_line: usize) {
     /* Finish display should restore the original console properties (buffer capacity, window
     size, font), clear the display area used by rustbox, and place the cursor one line below
     the rustbox display. NOTE: May clear display area to be consistent with ncurses. */

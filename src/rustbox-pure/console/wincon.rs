@@ -1,5 +1,5 @@
 /* This windows console API encapsulates all of the win32 data types and unsafe FFI calls,
-exposing the console in a more rustic manner */
+exposing the useful console functions in a more rustic manner */
 
 use super::winapi::{
     HANDLE,
