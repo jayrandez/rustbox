@@ -3,10 +3,10 @@ use super::style::{Color, Style};
 
 pub struct Cell
 {
-    pub character: u8,
-    pub foreground: Color,
-    pub background: Color,
-    pub style: Style
+    pub ch: char,
+    pub fg: Color,
+    pub bg: Color,
+    pub sty: Style
 }
 
 impl Copy for Cell{}

@@ -254,8 +254,27 @@ impl RustBox {
         }
     }
 
-    pub unsafe fn change_cell(&self, x: usize, y: usize, ch: u32, fg: u16, bg: u16) {
+    pub fn change_cell(&mut self, x: usize, y: usize, ch: u32, fg: Color, bg: Color, sty: Style) {
+        let width = self.cell_buffer.width;
+        let height = self.cell_buffer.height;
 
+        if x < width && y < height {
+            let attr = console::attr_translate(fg, bg, sty);
+
+            let char_slice = self.cell_buffer.char_buffer.as_mut_slice();
+            let attr_slice = self.cell_buffer.attr_buffer.as_mut_slice();
+
+            let index = (y * width) + x;
+            char_slice[index] = ch as u8;
+            attr_slice[index] = attr;
+        }
+    }
+
+    pub fn put_cell(&mut self, x: usize, y: usize, cell: Cell)
+    {
+        unsafe {
+            self.change_cell(x, y, cell.ch as u32, cell.fg, cell.bg, cell.sty);
+        }
     }
 
     pub fn print(&self, x: usize, y: usize, sty: Style, fg: Color, bg: Color, s: &str) {
