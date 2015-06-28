@@ -10,7 +10,7 @@ pub use self::display::*;
 use std::mem;
 use super::style;
 use super::style::{Color, Style};
-use super::event::{Event, Mouse};
+use super::event::{Event, Mouse, Key};
 
 use self::winapi::{
 	DWORD,
@@ -18,8 +18,13 @@ use self::winapi::{
     MOUSE_EVENT_RECORD, KEY_EVENT_RECORD, WINDOW_BUFFER_SIZE_RECORD,
     KEY_EVENT, MOUSE_EVENT, WINDOW_BUFFER_SIZE_EVENT,
     MOUSE_MOVED, MOUSE_WHEELED, FROM_LEFT_1ST_BUTTON_PRESSED, RIGHTMOST_BUTTON_PRESSED,
+	LEFT_CTRL_PRESSED, RIGHT_CTRL_PRESSED,
     FOREGROUND_RED, FOREGROUND_GREEN, FOREGROUND_BLUE, FOREGROUND_INTENSITY,
-	BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE, BACKGROUND_INTENSITY
+	BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE, BACKGROUND_INTENSITY,
+	VK_TAB, VK_RETURN, VK_ESCAPE, VK_BACK,
+	VK_RIGHT, VK_UP, VK_LEFT, VK_DOWN,
+	VK_DELETE, VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
+	VK_F1, VK_F24
 };
 
 pub fn translate_event(raw_event: RawEvent) -> Option<Event> {
@@ -58,7 +63,52 @@ fn translate_mouse_event(raw_event: MOUSE_EVENT_RECORD) -> Option<Event> {
 }
 
 fn translate_key_event(raw_event: KEY_EVENT_RECORD) -> Option<Event> {
-    None
+	Some(Event::KeyEvent(translate_key_code(raw_event)))
+}
+
+fn translate_key_code(raw_event: KEY_EVENT_RECORD) -> Option<Key> {
+	if raw_event.bKeyDown == 1 {
+		// The API seems to only handle key-down events.
+
+		match(raw_event.wVirtualKeyCode as u64) {
+			VK_TAB => Some(Key::Tab),
+			VK_RETURN => Some(Key::Enter),
+			VK_ESCAPE => Some(Key::Esc),
+			VK_BACK => Some(Key::Backspace),
+			VK_RIGHT => Some(Key::Right),
+			VK_LEFT => Some(Key::Left),
+			VK_UP => Some(Key::Up),
+			VK_DOWN => Some(Key::Down),
+			VK_DELETE => Some(Key::Delete),
+			VK_HOME => Some(Key::Home),
+			VK_END => Some(Key::End),
+			VK_PRIOR => Some(Key::PageUp),
+			VK_NEXT => Some(Key::PageDown),
+			vk_func if (vk_func >= VK_F1) && (vk_func <= VK_F24) => {
+				Some(Key::F((vk_func - VK_F1 + 1) as u32 ))
+			}
+			_ => {
+				if(raw_event.uChar != 0) {
+					let ctrl = {
+						raw_event.dwControlKeyState & LEFT_CTRL_PRESSED != 0 ||
+						raw_event.dwControlKeyState & RIGHT_CTRL_PRESSED != 0
+					};
+
+					if(ctrl) {
+						match(raw_event.uChar as u8) {
+							c if (c <= 37) => Some(Key::Ctrl((c + 64) as char)),
+							_ => None
+						}
+					}
+					else { Some(Key::Char(raw_event.uChar as u8 as char)) }
+				}
+				else { None }
+			}
+		}
+	}
+	else {
+		None
+	}
 }
 
 pub fn translate_attr(fg: Color, bg: Color, style: Style) -> u16

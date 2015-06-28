@@ -19,7 +19,12 @@ fn main() {
         match rustbox.poll_event(false) {
             Ok(rustbox::Event::KeyEvent(key)) => {
                 match key {
-                    Some(Key::Char('q')) => { break; }
+                    Some(Key::Char('q')) => { break; },
+                    Some(Key::Char(c)) => { println!("{}", c)},
+                    Some(Key::Ctrl(c)) => { println!("Ctrl + {}", c)},
+                    Some(Key::Tab) => { println!("Tab")},
+                    Some(Key::Enter) => { println!("Enter")},
+                    Some(Key::F(i)) => { println!("F-{}", i)},
                     _ => { }
                 }
             },

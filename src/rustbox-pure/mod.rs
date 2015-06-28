@@ -6,8 +6,7 @@ pub mod style;
 mod running;
 mod console;
 
-pub use self::event::{Event, Mouse, EventResult};
-pub use self::keyboard::Key;
+pub use self::event::{Event, Mouse, Key, EventResult};
 pub use self::cell::{Cell, CellBuffer};
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
 

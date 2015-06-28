@@ -1,5 +1,3 @@
-use super::keyboard::Key;
-
 use std::error::Error;
 use std::fmt;
 use num::FromPrimitive;
@@ -60,4 +58,26 @@ pub enum Mouse {
     WheelUp,
     WheelDown,
     Move
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Key {
+    Tab,
+    Enter,
+    Esc,
+    Backspace,
+    Right,
+    Left,
+    Up,
+    Down,
+    Delete,
+
+    Home,
+    End,
+    PageUp,
+    PageDown,
+
+    Char(char),
+    Ctrl(char),
+    F(u32),
 }
