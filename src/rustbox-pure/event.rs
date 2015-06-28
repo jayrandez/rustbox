@@ -1,5 +1,4 @@
 use super::keyboard::Key;
-use super::mouse::Mouse;
 
 use std::error::Error;
 use std::fmt;
@@ -50,4 +49,15 @@ impl FromPrimitive for EventError {
    fn from_u64(n: u64) -> Option<EventError> {
       Some(EventError::Unknown(n as isize))
    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Mouse {
+    Left,
+    Right,
+    Middle,
+    Release,
+    WheelUp,
+    WheelDown,
+    Move
 }
