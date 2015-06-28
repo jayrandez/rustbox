@@ -8,11 +8,19 @@ use super::winapi::{
     CONSOLE_SCREEN_BUFFER_INFO, PCONSOLE_SCREEN_BUFFER_INFO,
     CONSOLE_CURSOR_INFO, PCONSOLE_CURSOR_INFO,
     COORD, SMALL_RECT,
-    STD_OUTPUT_HANDLE
+    STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
+    INPUT_RECORD, PINPUT_RECORD,
+    MOUSE_EVENT_RECORD, KEY_EVENT_RECORD, WINDOW_BUFFER_SIZE_RECORD,
+    KEY_EVENT, MOUSE_EVENT, WINDOW_BUFFER_SIZE_EVENT,
+    MOUSE_MOVED, MOUSE_WHEELED, FROM_LEFT_1ST_BUTTON_PRESSED, RIGHTMOST_BUTTON_PRESSED,
+    FOREGROUND_RED, FOREGROUND_GREEN, FOREGROUND_BLUE, FOREGROUND_INTENSITY,
+	BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE, BACKGROUND_INTENSITY
 };
 
 use super::kernel32::{
     GetStdHandle,
+    SetConsoleMode,
     GetConsoleScreenBufferInfo,
     SetConsoleScreenBufferSize,
     WriteConsoleOutputCharacterA,
@@ -23,13 +31,21 @@ use super::kernel32::{
     FillConsoleOutputAttribute,
     GetConsoleCursorInfo,
     SetConsoleCursorInfo,
-    SetConsoleCursorPosition
+    SetConsoleCursorPosition,
+    ReadConsoleInputA,
+    ReadConsoleInputW,
 };
+
+use std::mem;
+use super::super::style;
+use super::super::style::{Color, Style};
+use super::super::event::{Event, Mouse};
 
 #[derive(Clone, Copy)]
 pub struct Handle
 {
-    ptr: HANDLE
+    input: HANDLE,
+    output: HANDLE
 }
 
 #[derive(Clone, Copy)]
@@ -48,15 +64,26 @@ pub struct Location
 
 pub fn handle() -> Option<Handle>
 {
-    let result = unsafe {
-        GetStdHandle(STD_OUTPUT_HANDLE)
+    let (in_handle, out_handle) = unsafe {
+        (GetStdHandle(STD_INPUT_HANDLE), GetStdHandle(STD_OUTPUT_HANDLE))
     };
 
-    if result as isize <= 0 {
+    if (in_handle as isize <= 0) || (out_handle as isize <= 0) {
         None
     }
     else {
-        Some(Handle { ptr: result })
+        Some(Handle { input: in_handle, output: out_handle })
+    }
+}
+
+pub fn set_mode(handle: Handle, enable_mouse: bool, enable_ctrlc: bool)
+{
+    let mut mode: DWORD = 0;
+    if enable_mouse { mode = mode | ENABLE_MOUSE_INPUT; }
+    if enable_ctrlc { mode = mode | ENABLE_PROCESSED_INPUT; }
+
+    unsafe {
+        SetConsoleMode(handle.input, mode);
     }
 }
 
@@ -75,7 +102,7 @@ fn screen_buffer_info(handle: Handle) -> CONSOLE_SCREEN_BUFFER_INFO
     };
 
     unsafe {
-        GetConsoleScreenBufferInfo(handle.ptr, &mut csbi as PCONSOLE_SCREEN_BUFFER_INFO);
+        GetConsoleScreenBufferInfo(handle.output, &mut csbi as PCONSOLE_SCREEN_BUFFER_INFO);
     }
 
     return csbi;
@@ -124,7 +151,7 @@ pub fn write_characters(handle: Handle, characters: &[u8], location: Location)
 
     unsafe {
         WriteConsoleOutputCharacterA(
-            handle.ptr,
+            handle.output,
             characters.as_ptr() as LPCSTR,
             characters.len() as DWORD,
             COORD {X: location.x as SHORT, Y: location.y as SHORT},
@@ -139,7 +166,7 @@ pub fn write_attributes(handle: Handle, attributes: &[u16], location: Location)
 
     unsafe {
         WriteConsoleOutputAttribute(
-            handle.ptr,
+            handle.output,
             attributes.as_ptr() as *const WORD,
             attributes.len() as DWORD,
             COORD {X: location.x as SHORT, Y: location.y as SHORT},
@@ -154,7 +181,7 @@ pub fn fill_character(handle: Handle, character: u8, length: usize, location: Lo
 
     unsafe {
         FillConsoleOutputCharacterA(
-            handle.ptr,
+            handle.output,
             character as CHAR,
             length as DWORD,
             COORD {X: location.x as SHORT, Y: location.y as SHORT},
@@ -169,7 +196,7 @@ pub fn fill_attribute(handle: Handle, attribute: u16, length: usize, location: L
 
     unsafe {
         FillConsoleOutputAttribute(
-            handle.ptr,
+            handle.output,
             attribute as WORD,
             length as DWORD,
             COORD {X: location.x as SHORT, Y: location.y as SHORT},
@@ -186,7 +213,7 @@ pub fn cursor_visible(handle: Handle) -> bool
     };
 
     unsafe {
-        GetConsoleCursorInfo(handle.ptr, &mut cci as PCONSOLE_CURSOR_INFO);
+        GetConsoleCursorInfo(handle.output, &mut cci as PCONSOLE_CURSOR_INFO);
     }
 
     return cci.bVisible != 0;
@@ -200,7 +227,7 @@ pub fn set_cursor_visible(handle: Handle, visible: bool)
     };
 
     unsafe {
-        SetConsoleCursorInfo(handle.ptr, &cci as *const CONSOLE_CURSOR_INFO);
+        SetConsoleCursorInfo(handle.output, &cci as *const CONSOLE_CURSOR_INFO);
     }
 }
 
@@ -216,13 +243,118 @@ pub fn set_cursor_location(handle: Handle, location: Location)
     let coord = COORD {X: location.x as SHORT, Y: location.y as SHORT};
 
     unsafe {
-        SetConsoleCursorPosition(handle.ptr, coord);
+        SetConsoleCursorPosition(handle.output, coord);
     }
+}
+
+pub fn read_input(handle: Handle) -> Option<Event>
+{
+    let mut _read: DWORD = 0;
+
+    /* NOTE: Based on comments in winapi->wincon.rs, this structure is subject to change, instead
+    using enum (i.e. tagged union) of MOUSE_EVENT_RECORD, KEY_EVENT_RECORD, etc. */
+    let mut record = INPUT_RECORD {
+        EventType: 0 as WORD,
+        Event: MOUSE_EVENT_RECORD {
+            dwMousePosition: COORD {X: 0, Y: 0},
+            dwButtonState: 0 as DWORD,
+            dwControlKeyState: 0 as DWORD,
+            dwEventFlags: 0 as DWORD,
+        }
+    };
+
+    unsafe {
+        ReadConsoleInputA(
+            handle.input,
+            &mut record as PINPUT_RECORD,
+            1 as DWORD,
+            &mut _read as LPDWORD
+        );
+    }
+
+    match(record.EventType as DWORD) {
+        MOUSE_EVENT => mouse_ev_translate(record.Event),
+        KEY_EVENT => key_ev_translate(unsafe {
+            mem::transmute::<MOUSE_EVENT_RECORD, KEY_EVENT_RECORD>(record.Event)
+        }),
+        _ => None
+    }
+}
+
+fn mouse_ev_translate(raw_event: MOUSE_EVENT_RECORD) -> Option<Event>
+{
+    let (x, y) = (raw_event.dwMousePosition.X as i32, raw_event.dwMousePosition.Y as i32);
+
+    match(raw_event.dwEventFlags) {
+        0 /* Mouse Up/Down */ => {
+            match(raw_event.dwButtonState) {
+                0 => Some(Event::MouseEvent(Mouse::Release, x, y)),
+                FROM_LEFT_1ST_BUTTON_PRESSED => Some(Event::MouseEvent(Mouse::Left, x, y)),
+                RIGHTMOST_BUTTON_PRESSED => Some(Event::MouseEvent(Mouse::Right, x, y)),
+                _ => Some(Event::MouseEvent(Mouse::Middle, x, y))
+            }
+        }
+        MOUSE_MOVED => {
+            Some(Event::MouseEvent(Mouse::Move, x, y))
+        }
+        MOUSE_WHEELED => {
+            let magnitude = (raw_event.dwButtonState >> 16) as i16;
+
+            if magnitude > 0 { Some(Event::MouseEvent(Mouse::WheelUp, x, y)) }
+            else { Some(Event::MouseEvent(Mouse::WheelDown, x, y)) }
+        }
+        _ => None
+    }
+}
+
+fn key_ev_translate(raw_event: KEY_EVENT_RECORD) -> Option<Event>
+{
+    None
+}
+
+pub fn attr_translate(fg: Color, bg: Color, style: Style) -> u16
+{
+	let mut attr: u16 = 0;
+
+	/* This is pretty inefficient since attr_translate has to be called for each change_cell.
+	But, not sure whether it's a good idea to have two separate implementations for Color enum
+	and Style bitfield */
+
+	attr = attr | match fg {
+		Color::Default => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE),
+		Color::Black => 0,
+		Color::Red => (FOREGROUND_RED | FOREGROUND_INTENSITY),
+		Color::Green => (FOREGROUND_GREEN | FOREGROUND_INTENSITY),
+		Color::Yellow => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY),
+		Color::Blue => (FOREGROUND_BLUE | FOREGROUND_INTENSITY),
+		Color::Magenta => (FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
+		Color::Cyan => (FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
+		Color::White => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
+	} as u16;
+
+	attr = attr | match bg {
+		Color::Default => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE),
+		Color::Black => 0,
+		Color::Red => (BACKGROUND_RED | BACKGROUND_INTENSITY),
+		Color::Green => (BACKGROUND_GREEN | BACKGROUND_INTENSITY),
+		Color::Yellow => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_INTENSITY),
+		Color::Blue => (BACKGROUND_BLUE | BACKGROUND_INTENSITY),
+		Color::Magenta => (BACKGROUND_RED | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
+		Color::Cyan => (BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
+		Color::White => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
+	} as u16;
+
+	if style.contains(style::RB_REVERSE) {
+		attr = ((attr >> 4) & 0x00FF) | ((attr << 4) & 0xFF00);
+	}
+
+	return attr;
 }
 
 /* Full Declaration Reference for Imported FFI Functions
 
 pub fn GetStdHandle(nStdHandle: DWORD) -> HANDLE;
+pub fn SetConsoleMode(hConsoleHandle: HANDLE, dwMode: DWORD) -> BOOL
 pub fn GetConsoleScreenBufferInfo(hConsoleOutput: HANDLE, lpConsoleScreenBufferInfo: PCONSOLE_SCREEN_BUFFER_INFO) -> BOOL;
 pub fn SetConsoleScreenBufferSize(hConsoleOutput: HANDLE, dwSize: COORD) -> BOOL;
 pub fn WriteConsoleOutputCharacterA(hConsoleOutput: HANDLE, lpCharacter: LPCSTR, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfCharsWritten: LPDWORD) -> BOOL;
@@ -233,4 +365,7 @@ pub fn FillConsoleOutputCharacterW(hConsoleOutput: HANDLE, cCharacter: WCHAR, nL
 pub fn FillConsoleOutputAttribute(hConsoleOutput: HANDLE, wAttribute: WORD, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfAttrsWritten: LPDWORD) -> BOOL;
 pub fn GetConsoleCursorInfo(hConsoleOutput: HANDLE, lpConsoleCursorInfo: PCONSOLE_CURSOR_INFO) -> BOOL;
 pub fn SetConsoleCursorInfo(hConsoleOutput: HANDLE, lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO) -> BOOL;
-pub fn SetConsoleCursorPosition(hConsoleOutput: HANDLE, dwCursorPosition: COORD) -> BOOL; */
+pub fn SetConsoleCursorPosition(hConsoleOutput: HANDLE, dwCursorPosition: COORD) -> BOOL;
+pub fn ReadConsoleInputA(hConsoleInput: HANDLE, lpBuffer: PINPUT_RECORD, nLength: DWORD, lpNumberOfEventsRead: LPDWORD) -> BOOL;
+pub fn ReadConsoleInputW(hConsoleInput: HANDLE, lpBuffer: PINPUT_RECORD, nLength: DWORD, lpNumberOfEventsRead: LPDWORD) -> BOOL;
+*/

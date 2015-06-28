@@ -1,15 +1,13 @@
 pub mod event;
 pub mod keyboard;
-pub mod mouse;
 pub mod cell;
 pub mod style;
 
 mod running;
 mod console;
 
-pub use self::event::{Event, EventResult};
+pub use self::event::{Event, Mouse, EventResult};
 pub use self::keyboard::Key;
-pub use self::mouse::Mouse;
 pub use self::cell::{Cell, CellBuffer};
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
 
@@ -155,6 +153,9 @@ impl RustBox {
             None => return Err(InitError::UnsupportedTerminal)
         };
 
+        // For now enable mouse input, ctrl-c by default
+        console::set_mode(handle, true, true);
+
         /* This function will eventually return a DisplayInfo struct encapsulating (in addition
         to visible_size and display_line) the original state to be restored when finished */
         let (visible_size, display_line) = console::begin_display(handle);
@@ -281,6 +282,7 @@ impl RustBox {
     }
 
     pub fn poll_event(&self, raw: bool) -> EventResult {
+        console::read_input(self.handle);
         Ok(Event::NoEvent)
     }
 
