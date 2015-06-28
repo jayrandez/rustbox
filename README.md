@@ -1,4 +1,17 @@
-**See [issues](https://github.com/jayrandez/rustbox/issues) for running notes on windows implementation**
+###See [issues](https://github.com/jayrandez/rustbox/issues) for running notes on windows implementation###
+
+**TODO:**
+- ~~basic visual api~~ 
+- mouse events
+- key events
+- window config (font, buffer size, window size, scrollbars)
+- use independent text buffer
+- fix RustBox::present flicker
+- unicode (>8 bit char) support
+- smooth out API
+- documentation
+- full example
+
 
 # Rustbox
 
