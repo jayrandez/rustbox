@@ -10,12 +10,7 @@ use super::winapi::{
     COORD, SMALL_RECT,
     STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
-    INPUT_RECORD, PINPUT_RECORD,
-    MOUSE_EVENT_RECORD, KEY_EVENT_RECORD, WINDOW_BUFFER_SIZE_RECORD,
-    KEY_EVENT, MOUSE_EVENT, WINDOW_BUFFER_SIZE_EVENT,
-    MOUSE_MOVED, MOUSE_WHEELED, FROM_LEFT_1ST_BUTTON_PRESSED, RIGHTMOST_BUTTON_PRESSED,
-    FOREGROUND_RED, FOREGROUND_GREEN, FOREGROUND_BLUE, FOREGROUND_INTENSITY,
-	BACKGROUND_RED, BACKGROUND_GREEN, BACKGROUND_BLUE, BACKGROUND_INTENSITY
+    INPUT_RECORD, PINPUT_RECORD, MOUSE_EVENT_RECORD
 };
 
 use super::kernel32::{
@@ -36,16 +31,17 @@ use super::kernel32::{
     ReadConsoleInputW,
 };
 
-use std::mem;
-use super::super::style;
-use super::super::style::{Color, Style};
-use super::super::event::{Event, Mouse};
-
 #[derive(Clone, Copy)]
 pub struct Handle
 {
     input: HANDLE,
     output: HANDLE
+}
+
+#[derive(Clone, Copy)]
+pub struct RawEvent
+{
+    pub record: INPUT_RECORD
 }
 
 #[derive(Clone, Copy)]
@@ -76,20 +72,18 @@ pub fn handle() -> Option<Handle>
     }
 }
 
+/* NOTE: The following ffi calls provide bool return value, and some of them provide other
+result values (such as number of characters written), both of which are ignored even though
+they maybe shouldn't be. */
+
 pub fn set_mode(handle: Handle, enable_mouse: bool, enable_ctrlc: bool)
 {
     let mut mode: DWORD = 0;
     if enable_mouse { mode = mode | ENABLE_MOUSE_INPUT; }
     if enable_ctrlc { mode = mode | ENABLE_PROCESSED_INPUT; }
 
-    unsafe {
-        SetConsoleMode(handle.input, mode);
-    }
+    unsafe { SetConsoleMode(handle.input, mode); }
 }
-
-/* NOTE: The following ffi calls provide bool return value, and some of them provide other
-result values (such as number of characters written), both of which are ignored even though
-they maybe shouldn't be. */
 
 fn screen_buffer_info(handle: Handle) -> CONSOLE_SCREEN_BUFFER_INFO
 {
@@ -101,11 +95,9 @@ fn screen_buffer_info(handle: Handle) -> CONSOLE_SCREEN_BUFFER_INFO
         dwMaximumWindowSize: COORD {X: 0, Y: 0},
     };
 
-    unsafe {
-        GetConsoleScreenBufferInfo(handle.output, &mut csbi as PCONSOLE_SCREEN_BUFFER_INFO);
-    }
+    unsafe { GetConsoleScreenBufferInfo(handle.output, &mut csbi as PCONSOLE_SCREEN_BUFFER_INFO); }
 
-    return csbi;
+    csbi
 }
 
 pub fn buffer_size(handle: Handle) -> Size
@@ -212,11 +204,9 @@ pub fn cursor_visible(handle: Handle) -> bool
         bVisible: false as BOOL
     };
 
-    unsafe {
-        GetConsoleCursorInfo(handle.output, &mut cci as PCONSOLE_CURSOR_INFO);
-    }
+    unsafe { GetConsoleCursorInfo(handle.output, &mut cci as PCONSOLE_CURSOR_INFO); }
 
-    return cci.bVisible != 0;
+    cci.bVisible != 0
 }
 
 pub fn set_cursor_visible(handle: Handle, visible: bool)
@@ -226,9 +216,7 @@ pub fn set_cursor_visible(handle: Handle, visible: bool)
         bVisible: visible as BOOL
     };
 
-    unsafe {
-        SetConsoleCursorInfo(handle.output, &cci as *const CONSOLE_CURSOR_INFO);
-    }
+    unsafe { SetConsoleCursorInfo(handle.output, &cci as *const CONSOLE_CURSOR_INFO); }
 }
 
 pub fn cursor_location(handle: Handle) -> Location
@@ -242,12 +230,10 @@ pub fn set_cursor_location(handle: Handle, location: Location)
 {
     let coord = COORD {X: location.x as SHORT, Y: location.y as SHORT};
 
-    unsafe {
-        SetConsoleCursorPosition(handle.output, coord);
-    }
+    unsafe { SetConsoleCursorPosition(handle.output, coord); }
 }
 
-pub fn read_input(handle: Handle) -> Option<Event>
+pub fn read_input(handle: Handle) -> RawEvent
 {
     let mut _read: DWORD = 0;
 
@@ -272,83 +258,7 @@ pub fn read_input(handle: Handle) -> Option<Event>
         );
     }
 
-    match(record.EventType as DWORD) {
-        MOUSE_EVENT => mouse_ev_translate(record.Event),
-        KEY_EVENT => key_ev_translate(unsafe {
-            mem::transmute::<MOUSE_EVENT_RECORD, KEY_EVENT_RECORD>(record.Event)
-        }),
-        _ => None
-    }
-}
-
-fn mouse_ev_translate(raw_event: MOUSE_EVENT_RECORD) -> Option<Event>
-{
-    let (x, y) = (raw_event.dwMousePosition.X as i32, raw_event.dwMousePosition.Y as i32);
-
-    match(raw_event.dwEventFlags) {
-        0 /* Mouse Up/Down */ => {
-            match(raw_event.dwButtonState) {
-                0 => Some(Event::MouseEvent(Mouse::Release, x, y)),
-                FROM_LEFT_1ST_BUTTON_PRESSED => Some(Event::MouseEvent(Mouse::Left, x, y)),
-                RIGHTMOST_BUTTON_PRESSED => Some(Event::MouseEvent(Mouse::Right, x, y)),
-                _ => Some(Event::MouseEvent(Mouse::Middle, x, y))
-            }
-        }
-        MOUSE_MOVED => {
-            Some(Event::MouseEvent(Mouse::Move, x, y))
-        }
-        MOUSE_WHEELED => {
-            let magnitude = (raw_event.dwButtonState >> 16) as i16;
-
-            if magnitude > 0 { Some(Event::MouseEvent(Mouse::WheelUp, x, y)) }
-            else { Some(Event::MouseEvent(Mouse::WheelDown, x, y)) }
-        }
-        _ => None
-    }
-}
-
-fn key_ev_translate(raw_event: KEY_EVENT_RECORD) -> Option<Event>
-{
-    None
-}
-
-pub fn attr_translate(fg: Color, bg: Color, style: Style) -> u16
-{
-	let mut attr: u16 = 0;
-
-	/* This is pretty inefficient since attr_translate has to be called for each change_cell.
-	But, not sure whether it's a good idea to have two separate implementations for Color enum
-	and Style bitfield */
-
-	attr = attr | match fg {
-		Color::Default => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE),
-		Color::Black => 0,
-		Color::Red => (FOREGROUND_RED | FOREGROUND_INTENSITY),
-		Color::Green => (FOREGROUND_GREEN | FOREGROUND_INTENSITY),
-		Color::Yellow => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY),
-		Color::Blue => (FOREGROUND_BLUE | FOREGROUND_INTENSITY),
-		Color::Magenta => (FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
-		Color::Cyan => (FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
-		Color::White => (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY),
-	} as u16;
-
-	attr = attr | match bg {
-		Color::Default => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE),
-		Color::Black => 0,
-		Color::Red => (BACKGROUND_RED | BACKGROUND_INTENSITY),
-		Color::Green => (BACKGROUND_GREEN | BACKGROUND_INTENSITY),
-		Color::Yellow => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_INTENSITY),
-		Color::Blue => (BACKGROUND_BLUE | BACKGROUND_INTENSITY),
-		Color::Magenta => (BACKGROUND_RED | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
-		Color::Cyan => (BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
-		Color::White => (BACKGROUND_RED | BACKGROUND_GREEN | BACKGROUND_BLUE | BACKGROUND_INTENSITY),
-	} as u16;
-
-	if style.contains(style::RB_REVERSE) {
-		attr = ((attr >> 4) & 0x00FF) | ((attr << 4) & 0xFF00);
-	}
-
-	return attr;
+    RawEvent { record: record }
 }
 
 /* Full Declaration Reference for Imported FFI Functions
