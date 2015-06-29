@@ -1,5 +1,7 @@
 extern crate winapi;
 extern crate kernel32;
+extern crate user32;
+extern crate ole32;
 
 pub mod wincon;
 pub mod display;

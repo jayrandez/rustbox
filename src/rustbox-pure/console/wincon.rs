@@ -2,7 +2,7 @@
 exposing the useful console functions in a more rustic manner */
 
 use super::winapi::{
-    HANDLE,
+    HANDLE, HWND,
     CHAR, SHORT, WORD, DWORD, BOOL,
     LPCSTR, LPCWSTR, LPDWORD,
     CONSOLE_SCREEN_BUFFER_INFO, PCONSOLE_SCREEN_BUFFER_INFO,
@@ -15,6 +15,7 @@ use super::winapi::{
 
 use super::kernel32::{
     GetStdHandle,
+    GetConsoleWindow,
     SetConsoleMode,
     GetConsoleScreenBufferInfo,
     SetConsoleScreenBufferSize,
@@ -70,6 +71,11 @@ pub fn handle() -> Option<Handle>
     else {
         Some(Handle { input: in_handle, output: out_handle })
     }
+}
+
+pub fn window_handle() -> HWND
+{
+    unsafe { GetConsoleWindow() }
 }
 
 /* NOTE: The following ffi calls provide bool return value, and some of them provide other
