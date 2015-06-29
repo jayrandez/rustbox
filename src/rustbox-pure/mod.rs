@@ -311,21 +311,3 @@ impl Drop for RustBox {
         console::finish_display(self.handle, self.display_line);
     }
 }
-
-use std::thread;
-use std::thread::JoinHandle;
-
-pub struct ConsoleWatcher
-{
-    thread: JoinHandle<()>
-}
-
-impl ConsoleWatcher
-{
-    pub fn new() -> ConsoleWatcher
-    {
-        ConsoleWatcher {
-            thread: console::hook_monitor()
-        }
-    }
-}

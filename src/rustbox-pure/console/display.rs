@@ -2,44 +2,11 @@ use super::wincon::*;
 use std::thread;
 use std::thread::JoinHandle;
 
-/* --------------------------------------------------------------
-   THESE TYPES SHOULD BE DEFINED BY CRATES "winapi", "user32-sys"
-   -------------------------------------------------------------- */
-
-type WINEVENTPROC = extern fn(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
-
-const WINEVENT_OUTOFCONTEXT: DWORD = 0x0000_0000;
-const EVENT_SYSTEM_MOVESIZESTART: DWORD = 0x0000_000A;
-const EVENT_SYSTEM_MOVESIZEEND: DWORD = 0x0000_000B;
-
-extern "system" {
-    pub fn SetWinEventHook(
-        eventmin: UINT,
-        eventMax: UINT,
-        hmodWinEventProc: HMODULE,
-        lpfnWinEventProc: WINEVENTPROC,
-        idProcess: DWORD,
-        idThread: DWORD,
-        dwflags: UINT
-    ) -> HWINEVENTHOOK;
-
-    pub fn UnhookWinEvent(hWinEventHook: HWINEVENTHOOK) -> BOOL;
-}
-
-/* -------------------------------------------------------------
-   END
-   ------------------------------------------------------------- */
-
-use super::winapi::{
-    BOOL, INT, WORD, DWORD, LPDWORD, LPVOID, UINT, LONG,
-    HWND, MSG, LPMSG, POINT, LPARAM, WPARAM,
-    HWINEVENTHOOK, HMODULE, COINIT_APARTMENTTHREADED
-};
-
-use super::user32::{GetWindowThreadProcessId, GetMessageW};
-use super::ole32::{CoInitializeEx, CoUninitialize};
+/*
+BEGINNING OF CODE FOR RESIZE HOOK
 
 static mut console_window: HWND = 0 as HWND;
+static mut console_handle: Handle = Handle {input: 0 as HANDLE, output: 0 as HANDLE};
 
 pub fn co_initialize() {
     let result = unsafe { CoInitializeEx(0 as LPVOID, COINIT_APARTMENTTHREADED) };
@@ -85,10 +52,15 @@ pub fn get_message() -> Option<MSG> {
     if result != 0 { Some(message) } else { None }
 }
 
-pub fn hook_monitor() -> JoinHandle<()>
+pub fn hook_monitor(handle: Handle) -> JoinHandle<()>
 {
+    unsafe { console_handle = handle; }
+    unsafe { set_buffer_size(console_handle, Size {width: 800, height: 800}); }
+
     thread::spawn(move || {
         store_hwnd();
+        set_scroll_enable(false);
+
         co_initialize();
 
         let hook = event_hook();
@@ -99,26 +71,30 @@ pub fn hook_monitor() -> JoinHandle<()>
     })
 }
 
-pub fn store_hwnd() {
-    unsafe { console_window = window_handle() };
-}
-
 extern fn callback(hWinEventHook: HWINEVENTHOOK, event: DWORD, hwnd: HWND, idObject: LONG, idChild: LONG, dwEventThread: DWORD, dwmsEventTime: DWORD) -> () {
     let for_console = unsafe { hwnd == console_window };
 
     if(for_console) {
         match(event) {
-            EVENT_SYSTEM_MOVESIZESTART => println!("Resize start."),
-            EVENT_SYSTEM_MOVESIZEEND => println!("Resize stop."),
+            EVENT_SYSTEM_MOVESIZESTART => resize_start(),
+            EVENT_SYSTEM_MOVESIZEEND => resize_stop(),
             _ => {}
         }
     }
 }
 
+pub fn resize_start() {
+}
+
+pub fn resize_stop() {
+}*/
+
 pub fn begin_display(handle: Handle) -> (Size, usize) {
     /* Begin display should set up the console with the necessary properties (buffer capacity,
     window size, font), and display a blank region for rustbox to use, while preserving the
     original console contents above this region. */
+    set_buffer_size(handle, Size {width: 800, height: 800});
+    set_scroll_enable(handle, false);
 
     // Scroll console to clear a region at least the height of the visible window. Kludgy
     let visible_size = visible_size(handle);

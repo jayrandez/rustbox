@@ -1,16 +1,39 @@
 /* This windows console API encapsulates all of the win32 data types and unsafe FFI calls,
 exposing the useful console functions in a more rustic manner */
 
+/* ----------------------------------------------------------------
+   The following symbols will be defined in the windows api crates.
+   ---------------------------------------------------------------- */
+
+extern "system" {
+    pub fn SetWinEventHook(eventmin: UINT, eventMax: UINT, hmodWinEventProc: HMODULE, lpfnWinEventProc: WINEVENTPROC, idProcess: DWORD, idThread: DWORD, dwflags: UINT) -> HWINEVENTHOOK;
+    pub fn UnhookWinEvent(hWinEventHook: HWINEVENTHOOK) -> BOOL;
+}
+
+type WINEVENTPROC = extern fn(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
+
+const WINEVENT_OUTOFCONTEXT: DWORD = 0x0000_0000;
+const EVENT_SYSTEM_MOVESIZESTART: DWORD = 0x0000_000A;
+const EVENT_SYSTEM_MOVESIZEEND: DWORD = 0x0000_000B;
+const ESB_DISABLE_BOTH: DWORD = 0x0000_0003;
+const ESB_ENABLE_BOTH: DWORD = 0x0000_0000;
+
+/* ----------------------------------------------------------------
+   The preceding symbols will be defined in the windows api crates.
+   ---------------------------------------------------------------- */
+
 use super::winapi::{
-    HANDLE, HWND,
-    CHAR, SHORT, WORD, DWORD, BOOL,
-    LPCSTR, LPCWSTR, LPDWORD,
+    HANDLE, HWND, HMODULE, HWINEVENTHOOK,
+    MSG, LPMSG, LPARAM, WPARAM, POINT,
+    CHAR, SHORT, WORD, INT, UINT, LONG, DWORD, BOOL,
+    LPCSTR, LPCWSTR, LPDWORD, LPVOID,
     CONSOLE_SCREEN_BUFFER_INFO, PCONSOLE_SCREEN_BUFFER_INFO,
     CONSOLE_CURSOR_INFO, PCONSOLE_CURSOR_INFO,
     COORD, SMALL_RECT,
     STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT,
-    INPUT_RECORD, PINPUT_RECORD, MOUSE_EVENT_RECORD
+    INPUT_RECORD, PINPUT_RECORD, MOUSE_EVENT_RECORD,
+    COINIT_APARTMENTTHREADED, SB_BOTH
 };
 
 use super::kernel32::{
@@ -32,11 +55,23 @@ use super::kernel32::{
     ReadConsoleInputW,
 };
 
+use super::user32::{
+    GetWindowThreadProcessId,
+    GetMessageW,
+    EnableScrollBar
+};
+
+use super::ole32::{
+    CoInitializeEx,
+    CoUninitialize
+};
+
 #[derive(Clone, Copy)]
 pub struct Handle
 {
-    input: HANDLE,
-    output: HANDLE
+    pub window: HWND,
+    pub input: HANDLE,
+    pub output: HANDLE
 }
 
 #[derive(Clone, Copy)]
@@ -61,26 +96,17 @@ pub struct Location
 
 pub fn handle() -> Option<Handle>
 {
-    let (in_handle, out_handle) = unsafe {
-        (GetStdHandle(STD_INPUT_HANDLE), GetStdHandle(STD_OUTPUT_HANDLE))
+    let (window_handle, in_handle, out_handle) = unsafe {
+        (GetConsoleWindow(), GetStdHandle(STD_INPUT_HANDLE), GetStdHandle(STD_OUTPUT_HANDLE))
     };
 
     if (in_handle as isize <= 0) || (out_handle as isize <= 0) {
         None
     }
     else {
-        Some(Handle { input: in_handle, output: out_handle })
+        Some(Handle { window: window_handle, input: in_handle, output: out_handle })
     }
 }
-
-pub fn window_handle() -> HWND
-{
-    unsafe { GetConsoleWindow() }
-}
-
-/* NOTE: The following ffi calls provide bool return value, and some of them provide other
-result values (such as number of characters written), both of which are ignored even though
-they maybe shouldn't be. */
 
 pub fn set_mode(handle: Handle, enable_mouse: bool, enable_ctrlc: bool)
 {
@@ -115,7 +141,9 @@ pub fn buffer_size(handle: Handle) -> Size
 
 pub fn set_buffer_size(handle: Handle, size: Size)
 {
-    panic!("Set Buffer Size Unimplemented");
+    unsafe {
+        SetConsoleScreenBufferSize(handle.output, COORD {X: size.width as SHORT, Y: size.height as SHORT});
+    }
 }
 
 pub fn visible_size(handle: Handle) -> Size
@@ -267,21 +295,12 @@ pub fn read_input(handle: Handle) -> RawEvent
     RawEvent { record: record }
 }
 
-/* Full Declaration Reference for Imported FFI Functions
-
-pub fn GetStdHandle(nStdHandle: DWORD) -> HANDLE;
-pub fn SetConsoleMode(hConsoleHandle: HANDLE, dwMode: DWORD) -> BOOL
-pub fn GetConsoleScreenBufferInfo(hConsoleOutput: HANDLE, lpConsoleScreenBufferInfo: PCONSOLE_SCREEN_BUFFER_INFO) -> BOOL;
-pub fn SetConsoleScreenBufferSize(hConsoleOutput: HANDLE, dwSize: COORD) -> BOOL;
-pub fn WriteConsoleOutputCharacterA(hConsoleOutput: HANDLE, lpCharacter: LPCSTR, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfCharsWritten: LPDWORD) -> BOOL;
-pub fn WriteConsoleOutputCharacterW(hConsoleOutput: HANDLE, lpCharacter: LPCWSTR, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfCharsWritten: LPDWORD) -> BOOL;
-pub fn WriteConsoleOutputAttribute(hConsoleOutput: HANDLE, lpAttribute: *const WORD, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfAttrsWritten: LPDWORD) -> BOOL;
-pub fn FillConsoleOutputCharacterA(hConsoleOutput: HANDLE, cCharacter: CHAR, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfCharsWritten: LPDWORD) -> BOOL;
-pub fn FillConsoleOutputCharacterW(hConsoleOutput: HANDLE, cCharacter: WCHAR, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfCharsWritten: LPDWORD) -> BOOL;
-pub fn FillConsoleOutputAttribute(hConsoleOutput: HANDLE, wAttribute: WORD, nLength: DWORD, dwWriteCoord: COORD, lpNumberOfAttrsWritten: LPDWORD) -> BOOL;
-pub fn GetConsoleCursorInfo(hConsoleOutput: HANDLE, lpConsoleCursorInfo: PCONSOLE_CURSOR_INFO) -> BOOL;
-pub fn SetConsoleCursorInfo(hConsoleOutput: HANDLE, lpConsoleCursorInfo: *const CONSOLE_CURSOR_INFO) -> BOOL;
-pub fn SetConsoleCursorPosition(hConsoleOutput: HANDLE, dwCursorPosition: COORD) -> BOOL;
-pub fn ReadConsoleInputA(hConsoleInput: HANDLE, lpBuffer: PINPUT_RECORD, nLength: DWORD, lpNumberOfEventsRead: LPDWORD) -> BOOL;
-pub fn ReadConsoleInputW(hConsoleInput: HANDLE, lpBuffer: PINPUT_RECORD, nLength: DWORD, lpNumberOfEventsRead: LPDWORD) -> BOOL;
-*/
+pub fn set_scroll_enable(handle: Handle, enable: bool) {
+    unsafe {
+        EnableScrollBar(
+            handle.window,
+            SB_BOTH as UINT,
+            if enable {ESB_ENABLE_BOTH} else {ESB_DISABLE_BOTH}
+        );
+    }
+}
