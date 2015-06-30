@@ -11,7 +11,7 @@ pub use self::cell::{Cell, CellBuffer};
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
 
 use self::running::running;
-use self::console::{Handle, RawEvent, Size, Location};
+use self::console::{DisplayInfo, Handle, RawEvent, Size, Location};
 
 use std::default::Default;
 use std::error::Error;
@@ -147,17 +147,17 @@ impl RustBox {
             None => return Err(InitError::AlreadyOpen),
         };
 
-        let handle = match console::handle() {
-            Some(val) => val,
-            None => return Err(InitError::UnsupportedTerminal)
-        };
+        /* This function will eventually return a DisplayInfo struct encapsulating (in addition
+        to visible_size and display_line) the original state to be restored when finished */
+        let DisplayInfo {
+            handle: handle,
+            visible_size: visible_size,
+            display_line: display_line
+        } = console::begin_display();
 
         // For now enable mouse input, ctrl-c by default
         console::set_mode(handle, true, true);
 
-        /* This function will eventually return a DisplayInfo struct encapsulating (in addition
-        to visible_size and display_line) the original state to be restored when finished */
-        let (visible_size, display_line) = console::begin_display(handle);
         let Size {width: width, height: height} = visible_size;
 
         let default_attr = console::translate_attr(Color::Default, Color::Black, style::RB_NORMAL);
