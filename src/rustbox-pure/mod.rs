@@ -1,20 +1,17 @@
 pub mod event;
 pub mod keyboard;
-pub mod mouse;
 pub mod cell;
 pub mod style;
 
 mod running;
 mod console;
 
-pub use self::event::{Event, EventResult};
-pub use self::keyboard::Key;
-pub use self::mouse::Mouse;
+pub use self::event::{Event, Mouse, Key, EventResult};
 pub use self::cell::{Cell, CellBuffer};
 pub use self::style::{Color, Style, RB_BOLD, RB_UNDERLINE, RB_REVERSE, RB_NORMAL};
 
 use self::running::running;
-use self::console::{Handle, Size, Location};
+use self::console::{Handle, RawEvent, Size, Location};
 
 use std::default::Default;
 use std::error::Error;
@@ -155,12 +152,15 @@ impl RustBox {
             None => return Err(InitError::UnsupportedTerminal)
         };
 
+        // For now enable mouse input, ctrl-c by default
+        console::set_mode(handle, true, true);
+
         /* This function will eventually return a DisplayInfo struct encapsulating (in addition
         to visible_size and display_line) the original state to be restored when finished */
         let (visible_size, display_line) = console::begin_display(handle);
         let Size {width: width, height: height} = visible_size;
 
-        let default_attr = console::attr_translate(Color::Default, Color::Black, style::RB_NORMAL);
+        let default_attr = console::translate_attr(Color::Default, Color::Black, style::RB_NORMAL);
         let cell_buffer = CellBuffer::new(width, height, b' ', default_attr);
 
         // Create the RustBox.
@@ -208,7 +208,7 @@ impl RustBox {
     }
 
     pub fn set_clear_attributes(&mut self, foreground: Color, background: Color, style: Style) {
-        self.default_attr = console::attr_translate(foreground, background, style);
+        self.default_attr = console::translate_attr(foreground, background, style);
     }
 
     pub fn present(&mut self) {
@@ -256,7 +256,7 @@ impl RustBox {
         let height = self.cell_buffer.height;
 
         if x < width && y < height {
-            let attr = console::attr_translate(fg, bg, sty);
+            let attr = console::translate_attr(fg, bg, sty);
 
             let char_slice = self.cell_buffer.char_buffer.as_mut_slice();
             let attr_slice = self.cell_buffer.attr_buffer.as_mut_slice();
@@ -281,7 +281,15 @@ impl RustBox {
     }
 
     pub fn poll_event(&self, raw: bool) -> EventResult {
-        Ok(Event::NoEvent)
+        /* Don't like the way this is implemented. I think Event::NoEvent is un-rustic,
+        should be indicated by None instead.
+
+        Also there is currently no error-handling in wincon.rs, so Err result is not used. */
+
+        let raw_event = console::read_input(self.handle);
+
+        if let Some(event) = console::translate_event(raw_event) { Ok(event) }
+        else { Ok(Event::NoEvent)  }
     }
 
     pub fn peek_event(&self, timeout: Duration, raw: bool) -> EventResult {

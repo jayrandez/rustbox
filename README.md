@@ -1,8 +1,8 @@
 ###See [issues](https://github.com/jayrandez/rustbox/issues) for running notes on windows implementation###
 
 **TODO:**
-- ~~basic visual api~~ 
-- mouse events
+- ~~basic visual api~~
+- ~~mouse events~~
 - key events
 - window config (font, buffer size, window size, scrollbars)
 - use independent text buffer

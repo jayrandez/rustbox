@@ -11,38 +11,25 @@ fn main() {
         Result::Err(e) => panic!("{}", e),
     };
 
-    rustbox.set_clear_attributes(Color::Default, Color::Default, style::RB_NORMAL);
-    rustbox.clear();
-    rustbox.present();
-
-    rustbox.set_cursor(1, 1);
-
-    std::thread::sleep_ms(3000);
-
-    println!("Before shutdown");
-
-    rustbox.shutdown();
-
-    println!("After shutdown");
-
-    std::thread::sleep_ms(3000);
-
-    rustbox.present();
-
-    /*rustbox.print(1, 1, rustbox::RB_BOLD, Color::White, Color::Black, "Hello, world!");
+    rustbox.print(1, 1, rustbox::RB_BOLD, Color::White, Color::Black, "Hello, world!");
     rustbox.print(1, 3, rustbox::RB_BOLD, Color::White, Color::Black,
                   "Press 'q' to quit.");
     loop {
-        rustbox.present();
+        //rustbox.present();
         match rustbox.poll_event(false) {
             Ok(rustbox::Event::KeyEvent(key)) => {
                 match key {
-                    Some(Key::Char('q')) => { break; }
+                    Some(Key::Char('q')) => { break; },
+                    Some(Key::Char(c)) => { println!("{}", c)},
+                    Some(Key::Ctrl(c)) => { println!("Ctrl + {}", c)},
+                    Some(Key::Tab) => { println!("Tab")},
+                    Some(Key::Enter) => { println!("Enter")},
+                    Some(Key::F(i)) => { println!("F-{}", i)},
                     _ => { }
                 }
             },
             Err(e) => panic!("{}", e),
             _ => { }
         }
-    }*/
+    }
 }
