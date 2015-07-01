@@ -50,7 +50,7 @@ fn translate_key_code(raw_event: KEY_EVENT_RECORD) -> Option<Key> {
 	if raw_event.bKeyDown == 1 {
 		// The API seems to only handle key-down events.
 
-		match(raw_event.wVirtualKeyCode as u32) {
+		match(raw_event.wVirtualKeyCode as WPARAM /* Why is VK_KEY WPARAM?? */) {
 			VK_TAB => Some(Key::Tab),
 			VK_RETURN => Some(Key::Enter),
 			VK_ESCAPE => Some(Key::Esc),
