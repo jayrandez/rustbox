@@ -10,6 +10,7 @@ pub use self::winapi::{
     PCONSOLE_SCREEN_BUFFER_INFO, CONSOLE_CURSOR_INFO, PCONSOLE_CURSOR_INFO, COORD, SMALL_RECT,
     INPUT_RECORD, PINPUT_RECORD, SECURITY_ATTRIBUTES, MOUSE_EVENT_RECORD, KEY_EVENT_RECORD,
     WINDOW_BUFFER_SIZE_RECORD, KEY_EVENT, MOUSE_EVENT, WINDOW_BUFFER_SIZE_EVENT,
+    CONSOLE_FONT_INFOEX, PCONSOLE_FONT_INFOEX,
 
     /* VALUES */
     STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_INPUT, SB_BOTH,
@@ -38,7 +39,9 @@ pub use self::kernel32::{
     SetConsoleCursorPosition,
     ReadConsoleInputA,
     ReadConsoleInputW,
-    CreateConsoleScreenBuffer
+    CreateConsoleScreenBuffer,
+    SetConsoleActiveScreenBuffer,
+    CloseHandle
 };
 
 pub use self::user32::{
@@ -60,6 +63,15 @@ extern "system" {
     ) -> HWINEVENTHOOK;
 
     pub fn UnhookWinEvent(hWinEventHook: HWINEVENTHOOK) -> BOOL;
+
+    pub fn SetConsoleFont(hOutput: HANDLE, fontIndex: DWORD);
+
+    pub fn GetConsoleFontInfo(hOutput: HANDLE, bMaximize: BOOL, numFonts: DWORD, info: *const CONSOLE_FONT);
+}
+
+pub struct CONSOLE_FONT {
+    index: DWORD,
+    dim: COORD
 }
 
 pub type WINEVENTPROC = extern fn(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);

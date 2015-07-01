@@ -8,6 +8,7 @@ use self::api::{HANDLE, HWND, INPUT_RECORD};
 #[derive(Clone, Copy)]
 pub struct DisplayInfo {
     pub handle: Handle,
+    stdout_buffer: HANDLE,
 	pub visible_size: Size,
 	pub display_line: usize
 }

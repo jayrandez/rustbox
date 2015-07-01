@@ -1,7 +1,13 @@
+use std::mem;
+
 use rustbox::console::{Handle, Size, Location, RawEvent};
 use rustbox::console::api::*;
 
-pub fn new_buffer() -> HANDLE {
+pub fn set_font(handle: Handle, index: usize) {
+    unsafe { SetConsoleFont(handle.output, index as DWORD); }
+}
+
+pub fn create_buffer() -> HANDLE {
     let handle = unsafe {
         CreateConsoleScreenBuffer(
             GENERIC_READ | GENERIC_WRITE,
@@ -13,6 +19,14 @@ pub fn new_buffer() -> HANDLE {
     };
     println!("New buffer is {}", handle as u32);
     handle
+}
+
+pub fn set_buffer(buffer: HANDLE) {
+    unsafe { SetConsoleActiveScreenBuffer(buffer); }
+}
+
+pub fn finish_buffer(buffer: HANDLE) {
+    unsafe { CloseHandle(buffer); }
 }
 
 pub fn window_handle() -> HWND {

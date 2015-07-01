@@ -111,7 +111,6 @@ impl Default for InitOptions {
 #[allow(missing_copy_implementations)]
 pub struct RustBox {
     handle: Handle,
-    display_line: usize,
     cell_buffer: CellBuffer,
     default_attr: u16,
     /* Note that running *MUST* be the last field in the destructor, since destructors run in
@@ -147,18 +146,15 @@ impl RustBox {
             None => return Err(InitError::AlreadyOpen),
         };
 
-        /* This function will eventually return a DisplayInfo struct encapsulating (in addition
-        to visible_size and display_line) the original state to be restored when finished */
-        let DisplayInfo {
-            handle: handle,
-            visible_size: visible_size,
-            display_line: display_line
-        } = console::begin_display();
+        let handle = console::begin_display();
 
         // For now enable mouse input, ctrl-c by default
         console::set_mode(handle, true, true);
 
-        let Size {width: width, height: height} = visible_size;
+        // Create resize event hook
+        // ...
+
+        let Size {width: width, height: height} = console::visible_size(handle);
 
         let default_attr = console::translate_attr(Color::Default, Color::Black, style::RB_NORMAL);
         let cell_buffer = CellBuffer::new(width, height, b' ', default_attr);
@@ -166,7 +162,6 @@ impl RustBox {
         // Create the RustBox.
         let mut rb = RustBox {
             handle: handle,
-            display_line: display_line,
             cell_buffer: cell_buffer,
             default_attr: default_attr,
             _running: running
@@ -229,7 +224,7 @@ impl RustBox {
             let char_subslice = &char_slice[index..(index + width)];
             let attr_subslice = &attr_slice[index..(index + width)];
 
-            let origin = Location {x: 0, y: line + self.display_line};
+            let origin = Location {x: 0, y: line};
             console::write_characters(self.handle, char_subslice, origin);
             console::write_attributes(self.handle, attr_subslice, origin);
         }
@@ -240,11 +235,10 @@ impl RustBox {
             console::set_cursor_visible(self.handle, false);
         }
         else {
-            let (x, y) = (x as usize, y as usize);
-            let visible_size = console::visible_size(self.handle);
+            let location = Location {x: x as usize, y: y as usize};
+            let size = console::visible_size(self.handle);
 
-            if x < visible_size.width && y < visible_size.height {
-                let location = Location {x: x, y: self.display_line + y};
+            if location.x < size.width && location.y < size.height {
                 console::set_cursor_location(self.handle, location);
                 console::set_cursor_visible(self.handle, true);
             }
@@ -308,6 +302,6 @@ impl Drop for RustBox {
         NOTE: we should definitely have RUSTBOX_RUNNING = true here.*/
 
         /* See sibling comment for console::startDisplay(). Will receive inst of DisplayInfo */
-        console::finish_display(self.handle, self.display_line);
+        console::finish_display(self.handle);
     }
 }
