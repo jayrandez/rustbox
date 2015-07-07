@@ -3,11 +3,11 @@
 **TODO:**
 - ~~basic visual api~~
 - ~~mouse events~~
-- key events
-- window config (font, buffer size, window size, scrollbars)
-- use independent text buffer
-- fix RustBox::present flicker
-- unicode (>8 bit char) support
+- ~~key events~~
+- window config (font, ~~buffer size~~, window size, ~~scrollbars~~)
+- ~~use independent text buffer~~
+- fix RustBox::present flicker [edit: to some extent by recording dirty rectangle]
+- ~~unicode (>8 bit char) support~~
 - smooth out API
 - documentation
 - full example
